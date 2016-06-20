@@ -14,6 +14,7 @@ struct table {
 	} *buckets[256];
 	Symbol all;
 };
+/// TODO:  但是预处理器怎么实现的，值得研究
 #define HASHSIZE NELEMS(((Table)0)->buckets)
 static struct table
 	cns = { CONSTANTS },
@@ -38,23 +39,28 @@ Table newtable(int arena) {
 }
 
 Table table(Table tp, int level) {
+	/* 动态表在FUNC区域分配 */
 	Table new = newtable(FUNC);
 	new->previous = tp;
 	new->level = level;
+	/* all域指向这一层次的最后一个符号，up指向前一个符号；同级第一个符号的up指向外层的最后一个符号 */
 	if (tp)
 		new->all = tp->all;
 	return new;
 }
 void foreach(Table tp, int lev, void (*apply)(Symbol, void *), void *cl) {
 	assert(tp);
+	/* previous直接指向外层 */
 	while (tp && tp->level > lev)
 		tp = tp->previous;
 	if (tp && tp->level == lev) {
 		Symbol p;
 		Coordinate sav;
 		sav = src;
+		/* all域指向这一层次的最后一个符号，up指向前一个符号；同级第一个符号的up指向外层的最后一个符号 */
 		for (p = tp->all; p && p->scope == lev; p = p->up) {
 			src = p->src;
+			/* 执行指定的操作；cl是数据closure */
 			(*apply)(p, cl);
 		}
 		src = sav;
@@ -94,8 +100,10 @@ Symbol install(const char *name, Table *tpp, int level, int arena) {
 	NEW0(p, arena);
 	p->sym.name = (char *)name;
 	p->sym.scope = level;
+	/* up指向最后一个节点，即all；然后更新all */
 	p->sym.up = tp->all;
 	tp->all = &p->sym;
+	/* link指向同一hash链中的最后一个节点；然后更新本身 */
 	p->link = tp->buckets[h];
 	tp->buckets[h] = p;
 	return &p->sym;
